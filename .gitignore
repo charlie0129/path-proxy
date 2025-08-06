@@ -71,3 +71,4 @@ vendor
 /coverage*
 /.claude
 /path-proxy
+*.bkp

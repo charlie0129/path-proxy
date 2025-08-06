@@ -11,6 +11,21 @@ This is useful for dynamic routing scenarios where you want to access different 
 3. **Integration**: Provide a unified access point for multiple services
 4. **Demo**: Create demo environments where services are accessed through a proxy
 
+Example: accessing restricted resources
+
+Consider a scenario where your Internet access is restricted, e.g. in a corporate environment or in some countries with restricted Internet access, you cannot access some websites directly. You can use this proxy to access those resources by encoding the target URL in the request path.
+
+![example](docs/example.svg)
+
+For example, when you get a GitHub release artifact link but you cannot access GitHub directly, you can use this proxy to download the file without the need to setup or use a full proxy server:
+
+```bash
+curl -O http://localhost:8080/https/github.com/443/charlie0129/path-proxy/releases/download/v1.0.0/myfile.zip
+```
+
+As you can see, this is especially useful for situations like: on a public server where you don't have a proxy, or in browsers where you cannot configure a proxy.
+
+
 Note that you should use regular forward proxies (e.g. using HTTP_PROXY/HTTPS_PROXY environment variables) or reverse proxies (e.g. Traefik, NGINX, Caddy) if possible, as they are more common. This proxy is designed for specific use cases where you need to route requests dynamically without configuration, or your environment does not allow for traditional proxy setups.
 
 ## Features

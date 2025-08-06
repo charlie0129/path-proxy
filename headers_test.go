@@ -7,36 +7,36 @@ import (
 
 func TestCopyHeaders_FilterHopByHopHeaders(t *testing.T) {
 	tests := []struct {
-		name           string
-		sourceHeaders  http.Header
-		expectedCopied map[string][]string
+		name            string
+		sourceHeaders   http.Header
+		expectedCopied  map[string][]string
 		expectedDropped []string
 	}{
 		{
 			name: "Standard hop-by-hop headers should be dropped",
 			sourceHeaders: http.Header{
-				"Content-Type":       {"application/json"},
+				"Content-Type":      {"application/json"},
 				"User-Agent":        {"test-agent"},
 				"Connection":        {"keep-alive"},
-				"Upgrade":          {"websocket"},
+				"Upgrade":           {"websocket"},
 				"Transfer-Encoding": {"chunked"},
-				"Authorization":    {"Bearer token123"},
+				"Authorization":     {"Bearer token123"},
 			},
 			expectedCopied: map[string][]string{
-				"Content-Type":    {"application/json"},
-				"User-Agent":     {"test-agent"},
-				"Authorization":  {"Bearer token123"},
+				"Content-Type":  {"application/json"},
+				"User-Agent":    {"test-agent"},
+				"Authorization": {"Bearer token123"},
 			},
 			expectedDropped: []string{"Connection", "Upgrade", "Transfer-Encoding"},
 		},
 		{
 			name: "Connection header with additional hop-by-hop headers",
 			sourceHeaders: http.Header{
-				"Content-Type": {"text/html"},
-				"Connection":   {"close, X-Custom-Hop, X-Another-Hop"},
-				"X-Custom-Hop": {"should-be-dropped"},
+				"Content-Type":  {"text/html"},
+				"Connection":    {"close, X-Custom-Hop, X-Another-Hop"},
+				"X-Custom-Hop":  {"should-be-dropped"},
 				"X-Another-Hop": {"also-dropped"},
-				"X-Regular":    {"should-remain"},
+				"X-Regular":     {"should-remain"},
 			},
 			expectedCopied: map[string][]string{
 				"Content-Type": {"text/html"},
@@ -47,8 +47,8 @@ func TestCopyHeaders_FilterHopByHopHeaders(t *testing.T) {
 		{
 			name: "No hop-by-hop headers",
 			sourceHeaders: http.Header{
-				"Content-Type":   {"application/xml"},
-				"Accept":         {"application/xml"},
+				"Content-Type":    {"application/xml"},
+				"Accept":          {"application/xml"},
 				"X-Custom-Header": {"custom-value"},
 			},
 			expectedCopied: map[string][]string{
@@ -59,9 +59,9 @@ func TestCopyHeaders_FilterHopByHopHeaders(t *testing.T) {
 			expectedDropped: []string{},
 		},
 		{
-			name: "Empty headers",
-			sourceHeaders: http.Header{},
-			expectedCopied: map[string][]string{},
+			name:            "Empty headers",
+			sourceHeaders:   http.Header{},
+			expectedCopied:  map[string][]string{},
 			expectedDropped: []string{},
 		},
 	}
@@ -70,10 +70,10 @@ func TestCopyHeaders_FilterHopByHopHeaders(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create destination header
 			dst := make(http.Header)
-			
+
 			// Call the function being tested
 			copyHeaders(dst, tt.sourceHeaders)
-			
+
 			// Verify copied headers
 			for key, expectedValues := range tt.expectedCopied {
 				if values, exists := dst[key]; !exists {
@@ -82,14 +82,14 @@ func TestCopyHeaders_FilterHopByHopHeaders(t *testing.T) {
 					t.Errorf("Header %s values mismatch. Got %v, want %v", key, values, expectedValues)
 				}
 			}
-			
+
 			// Verify dropped headers
 			for _, droppedHeader := range tt.expectedDropped {
 				if _, exists := dst[droppedHeader]; exists {
 					t.Errorf("Header %s should be dropped but was copied", droppedHeader)
 				}
 			}
-			
+
 			// Verify no extra headers were copied
 			if len(dst) != len(tt.expectedCopied) {
 				t.Errorf("Wrong number of headers copied. Got %d, want %d", len(dst), len(tt.expectedCopied))
