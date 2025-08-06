@@ -247,8 +247,8 @@ The proxy automatically modifies headers:
 
 1. **Host Header**: Set to match the target domain and port
 2. **X-Forwarded-For**: Appends the client's IP address
-3. **X-Forwarded-Proto**: Set to "http" or "https" based on the original request
-4. **X-Forwarded-Host**: Set to the original Host header
+3. **X-Forwarded-Proto**: Set to "http" or "https" based on the original request, if not already set
+4. **X-Forwarded-Host**: Set to the original Host header, if not already set
 
 You can disable adding X-Forwarded-* headers with `--add-headers=false`.
 
@@ -278,7 +278,7 @@ When redirects are disabled, the proxy returns redirect responses (3xx) as-is to
 The proxy returns appropriate HTTP status codes:
 - `400 Bad Request`: Invalid URL format
 - `401 Unauthorized`: Invalid or missing token
-- `502 Bad Gateway`: Target server unreachable
+- `502 Bad Gateway`: Target server unreachable or too many redirects
 - `504 Gateway Timeout`: Target server timeout
 
 ## Performance
