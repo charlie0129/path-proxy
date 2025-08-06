@@ -29,7 +29,13 @@ Note that you should use regular forward proxies (e.g. using HTTP_PROXY/HTTPS_PR
 
 ### Download from Releases
 
-Head to the [Releases](https://github.com/charlie0129/path-proxy/releases) page and download the latest binary for your platform. Extract the archive and place the binary in your PATH.
+Head to the [Releases](https://github.com/charlie0129/path-proxy/releases) page and download the latest binary for your platform:
+
+- `linux` (Linux): amd64 (x86_64), arm64 (aarch64)
+- `darwin` (macOS): amd64 (x86_64), arm64 (aarch64)
+- `windows` (Windows): amd64 (x86_64), arm64 (aarch64)
+
+Extract the archive and place the binary in your PATH (usually `/usr/local/bin` on Unix systems).
 
 ### Docker Containers
 

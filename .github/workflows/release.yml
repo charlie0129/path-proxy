@@ -8,16 +8,22 @@ on:
 
 permissions:
   packages: write
+  contents: write
 
 jobs:
   checks:
-    name: Build
+    name: Release Containers and Binaries
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Install Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 1.24
 
       - name: Login ghcr.io
         uses: docker/login-action@v2
@@ -45,14 +51,17 @@ jobs:
       - name: Show Available Platforms
         run: echo ${{ steps.buildx.outputs.platforms }}
 
-      - name: Push Containers
+      - name: Build and Push Containers
         run: make all-container-push
-      
+
+      - name: Build Binaries
+        run: make all-package
+
       - name: Upload binaries to release
         uses: svenstaro/upload-release-action@v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: bin/packages-latest/path-proxy*
+          file: bin/path-proxy-packages-latest/path-proxy*
           tag: ${{ github.ref }}
           overwrite: true
           file_glob: true
