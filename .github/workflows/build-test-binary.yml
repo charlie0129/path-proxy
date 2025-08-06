@@ -1,0 +1,55 @@
+name: Buind Test Binary
+
+on:
+  push:
+    branches:
+      - master
+      - release-*
+    tags:
+      - "v*"
+  pull_request:
+    branches:
+      - master
+      - release-*
+  workflow_dispatch: {}
+
+jobs:
+  detect-noop:
+    name: Detect No-op Changes
+    runs-on: ubuntu-latest
+    outputs:
+      noop: ${{ steps.noop.outputs.should_skip }}
+    steps:
+      - name: Detect No-op Changes
+        id: noop
+        uses: fkirc/skip-duplicate-actions@v5
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          paths_ignore: '["**.md", "**.mdx", "**.png", "**.jpg", "**.svg"]'
+          do_not_skip: '["workflow_dispatch", "schedule", "push"]'
+          concurrent_skipping: false
+
+  build:
+    name: Build Binary
+    runs-on: ubuntu-latest
+    needs: detect-noop
+    if: needs.detect-noop.outputs.noop != 'true'
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 1.24
+
+      - name: Build
+        run: make
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: batt
+          path: bin/batt

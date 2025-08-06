@@ -1,0 +1,104 @@
+version: "2"
+linters:
+  enable:
+    - goconst
+    - gocritic
+    - gocyclo
+    - misspell
+    - nakedret
+    - revive
+    - unconvert
+  settings:
+    dupl:
+      threshold: 100
+    errcheck:
+      check-type-assertions: false
+      check-blank: false
+    exhaustive:
+      default-signifies-exhaustive: true
+    goconst:
+      min-len: 3
+      min-occurrences: 5
+    gocritic:
+      enabled-tags:
+        - performance
+      settings:
+        captLocal:
+          paramsOnly: true
+        rangeValCopy:
+          sizeThreshold: 32
+    gocyclo:
+      min-complexity: 30
+    lll:
+      tab-width: 1
+    makezero:
+      always: false
+    nakedret:
+      max-func-lines: 30
+    unparam:
+      check-exported: false
+  exclusions:
+    generated: lax
+    rules:
+      - linters:
+          - dupl
+          - errcheck
+          - exportloopref
+          - gocyclo
+          - gosec
+          - unparam
+        path: _test(ing)?\.go
+      - linters:
+          - gocritic
+        path: _test\.go
+        text: (unnamedResult|exitAfterDefer)
+      - linters:
+          - gocritic
+        text: '(hugeParam|rangeValCopy):'
+      - linters:
+          - staticcheck
+        text: 'SA3000:'
+      - linters:
+          - revive
+        text: 'package-comments: should have a package comment'
+      - linters:
+          - revive
+        text: 'exported: exported'
+      - linters:
+          - revive
+        text: 'unused-parameter'
+      - linters:
+          - gosec
+        text: 'G101:'
+      - linters:
+          - gosec
+        text: 'G104:'
+      - linters:
+          - errcheck
+        text: \.AddToUserAgent
+      - linters:
+          - revive
+        text: don't use an underscore
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+issues:
+  max-same-issues: 0
+  new: false
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    gofmt:
+      simplify: true
+    goimports:
+      local-prefixes:
+        - github.com/oam-dev/kubevela
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
