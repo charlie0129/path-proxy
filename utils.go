@@ -120,7 +120,7 @@ func (lrw *loggingResponseWriter) Write(b []byte) (int, error) {
 }
 
 // validateToken validates the provided token against the token set
-func validateToken(token string, tokenSet map[string]struct{}) bool {
+func validateToken(token string, tokenSet map[string]Empty) bool {
 	_, ok := tokenSet[token]
 	return ok
 }

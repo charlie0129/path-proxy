@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"maps"
 	"net/http"
 	"net/url"
 	"path"
@@ -17,6 +16,22 @@ const (
 	// Supported protocols
 	ProtocolHTTP  = "http"
 	ProtocolHTTPS = "https"
+)
+
+type Empty struct{}
+
+var (
+	// Standard hop-by-hop headers defined in RFC 7230
+	hopByHopHeaders = map[string]Empty{
+		"Connection":          {},
+		"Keep-Alive":          {},
+		"Proxy-Authenticate":  {},
+		"Proxy-Authorization": {},
+		"TE":                  {},
+		"Trailers":            {},
+		"Transfer-Encoding":   {},
+		"Upgrade":             {},
+	}
 )
 
 // extractPathPrefix removes the configured path prefix from the request path
@@ -117,12 +132,36 @@ func parseTargetURL(targetPath, pathPrefix string) (*url.URL, error) {
 	return parsedURL, nil
 }
 
+// copyHeaders copies headers from source to destination, excluding hop-by-hop headers
+func copyHeaders(dst, src http.Header) {
+	// Check Connection header for additional hop-by-hop headers
+	var additionalHopByHopHeaders = make(map[string]Empty)
+	if connectionHeaders := src.Values("Connection"); len(connectionHeaders) > 0 {
+		for _, connHeader := range connectionHeaders {
+			for _, h := range strings.Split(connHeader, ",") {
+				additionalHopByHopHeaders[strings.TrimSpace(h)] = Empty{}
+			}
+		}
+	}
+
+	// Copy headers, excluding hop-by-hop headers
+	for key, values := range src {
+		if _, ok := hopByHopHeaders[key]; ok {
+			continue
+		}
+		if _, ok := additionalHopByHopHeaders[key]; ok {
+			continue
+		}
+		dst[key] = values
+	}
+}
+
 // createProxyHandler creates the main HTTP handler for the reverse proxy
 func createProxyHandler(client *http.Client, tokens []string, pathPrefix string, addHeaders bool) http.Handler {
 	// Convert tokens to a set for O(1) lookup
-	tokenSet := make(map[string]struct{})
+	tokenSet := make(map[string]Empty)
 	for _, token := range tokens {
-		tokenSet[token] = struct{}{}
+		tokenSet[token] = Empty{}
 	}
 
 	// Normalize path prefix - remove leading/trailing slashes and ensure it starts without a slash
@@ -223,8 +262,8 @@ func handleRequestWithRedirects(
 		return
 	}
 
-	// Copy headers
-	maps.Copy(targetReq.Header, r.Header)
+	// Copy headers, excluding hop-by-hop headers
+	copyHeaders(targetReq.Header, r.Header)
 
 	// Set Host header
 	targetReq.Host = targetURL.Host
@@ -282,8 +321,8 @@ func handleRequestWithRedirects(
 	//nolint:errcheck
 	defer resp.Body.Close()
 
-	// Copy response headers
-	maps.Copy(w.Header(), resp.Header)
+	// Copy response headers, excluding hop-by-hop headers
+	copyHeaders(w.Header(), resp.Header)
 
 	// Set status code
 	w.WriteHeader(resp.StatusCode)

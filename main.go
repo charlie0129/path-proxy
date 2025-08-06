@@ -216,6 +216,7 @@ func run(cmd *cobra.Command, args []string) {
 		// Gracefully shutdown the server
 		if err := server.Shutdown(ctx); err != nil {
 			slog.Error("Server forced to shutdown", "error", err)
+			//nolint:gocritic
 			os.Exit(1)
 		}
 
