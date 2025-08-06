@@ -13,13 +13,6 @@ import (
 	"time"
 )
 
-// createTestHTTPClient creates a test HTTP client with connection pooling
-func createTestHTTPClient() *http.Client {
-	return &http.Client{
-		Timeout: 30 * time.Second,
-	}
-}
-
 // Test server that simulates a target server
 func createMockTargetServer() *httptest.Server {
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -68,8 +61,8 @@ func TestTokenAuthentication(t *testing.T) {
 	defer mockServer.Close()
 
 	tokens := []string{"valid-token", "another-token"}
-	client := createTestHTTPClient()
-	handler := createProxyHandler(client, tokens, "", true, 10, true)
+	client := createHTTPClient(&defaultConfig)
+	handler := createProxyHandler(client, tokens, "", true)
 
 	// Parse mock server URL
 	serverURL, err := url.Parse(mockServer.URL)
@@ -114,8 +107,8 @@ func TestNoTokenMode(t *testing.T) {
 	mockServer := createMockTargetServer()
 	defer mockServer.Close()
 
-	client := createTestHTTPClient()
-	handler := createProxyHandler(client, []string{}, "", true, 10, true)
+	client := createHTTPClient(&defaultConfig)
+	handler := createProxyHandler(client, []string{}, "", true)
 
 	// Parse mock server URL
 	serverURL, err := url.Parse(mockServer.URL)
@@ -158,8 +151,8 @@ func TestURLParsing(t *testing.T) {
 	mockServer := createMockTargetServer()
 	defer mockServer.Close()
 
-	client := createTestHTTPClient()
-	handler := createProxyHandler(client, []string{"token"}, "", true, 10, true)
+	client := createHTTPClient(&defaultConfig)
+	handler := createProxyHandler(client, []string{"token"}, "", true)
 
 	// Parse mock server URL
 	serverURL, err := url.Parse(mockServer.URL)
@@ -228,8 +221,8 @@ func TestRequestForwarding(t *testing.T) {
 	mockServer := createMockTargetServer()
 	defer mockServer.Close()
 
-	client := createTestHTTPClient()
-	handler := createProxyHandler(client, []string{"token"}, "", true, 10, true)
+	client := createHTTPClient(&defaultConfig)
+	handler := createProxyHandler(client, []string{"token"}, "", true)
 
 	// Parse mock server URL
 	serverURL, err := url.Parse(mockServer.URL)
@@ -307,8 +300,8 @@ func TestXForwardedHeaders(t *testing.T) {
 	mockServer := createMockTargetServer()
 	defer mockServer.Close()
 
-	client := createTestHTTPClient()
-	handler := createProxyHandler(client, []string{"token"}, "", true, 10, true)
+	client := createHTTPClient(&defaultConfig)
+	handler := createProxyHandler(client, []string{"token"}, "", true)
 
 	// Parse mock server URL
 	serverURL, err := url.Parse(mockServer.URL)
@@ -355,8 +348,10 @@ func TestRedirectHandling(t *testing.T) {
 	defer redirectServer.Close()
 
 	t.Run("Redirects enabled", func(t *testing.T) {
-		client := createTestHTTPClient()
-		handler := createProxyHandler(client, []string{"token"}, "", true, 10, true)
+		cfg := defaultConfig
+		cfg.Follow = true // Enable redirects
+		client := createHTTPClient(&cfg)
+		handler := createProxyHandler(client, []string{"token"}, "", true)
 
 		// Parse mock server URL
 		serverURL, err := url.Parse(redirectServer.URL)
@@ -390,8 +385,10 @@ func TestRedirectHandling(t *testing.T) {
 	})
 
 	t.Run("Redirects disabled", func(t *testing.T) {
-		client := createTestHTTPClient()
-		handler := createProxyHandler(client, []string{"token"}, "", false, 10, true)
+		cfg := defaultConfig
+		cfg.Follow = false // Disable redirects
+		client := createHTTPClient(&cfg)
+		handler := createProxyHandler(client, []string{"token"}, "", true)
 
 		// Parse mock server URL
 		serverURL, err := url.Parse(redirectServer.URL)
@@ -425,8 +422,10 @@ func TestMaxRedirects(t *testing.T) {
 	}))
 	defer redirectServer.Close()
 
-	client := createTestHTTPClient()
-	handler := createProxyHandler(client, []string{"token"}, "", true, 2, true) // Max 2 redirects
+	cfg := defaultConfig
+	cfg.MaxRedirect = 2 // Set max redirects to 2
+	client := createHTTPClient(&cfg)
+	handler := createProxyHandler(client, []string{"token"}, "", true)
 
 	// Parse mock server URL
 	serverURL, err := url.Parse(redirectServer.URL)
@@ -447,14 +446,14 @@ func TestMaxRedirects(t *testing.T) {
 	handler.ServeHTTP(w, req)
 
 	resp := w.Result()
-	if resp.StatusCode != http.StatusTooManyRequests {
-		t.Errorf("Expected status 429 after max redirects, got %d", resp.StatusCode)
+	if resp.StatusCode != http.StatusBadGateway {
+		t.Errorf("Expected status 502 after max redirects, got %d", resp.StatusCode)
 	}
 }
 
 func TestErrorHandling(t *testing.T) {
-	client := createTestHTTPClient()
-	handler := createProxyHandler(client, []string{"token"}, "", true, 10, true)
+	client := createHTTPClient(&defaultConfig)
+	handler := createProxyHandler(client, []string{"token"}, "", true)
 
 	t.Run("Invalid target URL", func(t *testing.T) {
 		req := httptest.NewRequest("GET", "http://example.com/token/https/invalid%20url/test", nil)
@@ -500,8 +499,8 @@ func TestHostHeader(t *testing.T) {
 	mockServer := createMockTargetServer()
 	defer mockServer.Close()
 
-	client := createTestHTTPClient()
-	handler := createProxyHandler(client, []string{"token"}, "", true, 10, true)
+	client := createHTTPClient(&defaultConfig)
+	handler := createProxyHandler(client, []string{"token"}, "", true)
 
 	// Parse mock server URL
 	serverURL, err := url.Parse(mockServer.URL)
@@ -539,8 +538,8 @@ func TestCORSWithProxy(t *testing.T) {
 	mockServer := createMockTargetServer()
 	defer mockServer.Close()
 
-	client := createTestHTTPClient()
-	handler := createProxyHandler(client, []string{"token"}, "", true, 10, true)
+	client := createHTTPClient(&defaultConfig)
+	handler := createProxyHandler(client, []string{"token"}, "", true)
 
 	// Wrap with CORS middleware
 	corsHandler := corsMiddleware(handler, "*", "GET, POST", "Content-Type")
@@ -591,8 +590,8 @@ func TestCORSWithProxy(t *testing.T) {
 }
 
 func TestInvalidHTTPRequestMethod(t *testing.T) {
-	client := createTestHTTPClient()
-	handler := createProxyHandler(client, []string{"token"}, "", true, 10, true)
+	client := createHTTPClient(&defaultConfig)
+	handler := createProxyHandler(client, []string{"token"}, "", true)
 
 	// Parse mock server URL
 	serverURL, err := url.Parse("http://example.com")

@@ -11,14 +11,23 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"path"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
 
-	"github.com/charlie0129/path-proxy/pkg/version"
 	"github.com/lmittmann/tint"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
+
+	"github.com/charlie0129/path-proxy/pkg/version"
+)
+
+const (
+	// Supported protocols
+	ProtocolHTTP  = "http"
+	ProtocolHTTPS = "https"
 )
 
 // Config holds the configuration for the reverse proxy
@@ -41,17 +50,39 @@ type Config struct {
 	TLSHandshakeTimeout int      // TLS handshake timeout in seconds
 	DisableKeepAlives   bool     // Disable HTTP keep-alives
 	ShutdownTimeout     int      // Shutdown timeout in seconds
+	RequestTimeout      int      // Request timeout in seconds
 }
 
-func main() {
-	var cfg Config
+var defaultConfig = Config{
+	Port:                8080,
+	Tokens:              []string{},
+	TokenFile:           "",
+	PathPrefix:          "",
+	Follow:              true,
+	MaxRedirect:         10,
+	AddHeaders:          true,
+	LogLevel:            "info",
+	EnableCORS:          false,
+	CORSOrigin:          "*",
+	CORSMethods:         "GET, POST, PUT, DELETE, OPTIONS",
+	CORSHeaders:         "Content-Type, Authorization",
+	MaxIdleConns:        100,
+	MaxIdleConnsPerHost: 10,
+	IdleConnTimeout:     90,
+	TLSHandshakeTimeout: 10,
+	DisableKeepAlives:   false,
+	ShutdownTimeout:     5,
+	RequestTimeout:      30,
+}
 
-	// Create the root Cobra command
-	var rootCmd = &cobra.Command{
-		Use:     "path-proxy",
-		Version: version.Version,
-		Short:   "A reverse proxy that forwards requests based on URL path",
-		Long: `Path-Proxy is a specialized reverse proxy that forwards requests 
+var cfg = defaultConfig
+
+// Create the root Cobra command
+var rootCmd = &cobra.Command{
+	Use:     "path-proxy",
+	Version: version.Version,
+	Short:   "A reverse proxy that forwards requests based on URL path",
+	Long: `Path-Proxy is a specialized reverse proxy that forwards requests 
 by extracting target information from the URL path. It supports both token-based 
 and token-less routing modes, with optional custom path prefix.
 
@@ -94,113 +125,123 @@ HTTP Proxy Support:
   Example:
     export HTTP_PROXY=http://proxy.example.com:8080
     export HTTPS_PROXY=http://proxy.example.com:8080
-    path-proxy -p 8080`,
-		Run: func(cmd *cobra.Command, args []string) {
-			// Start with tokens from CLI flags
-			tokens := cfg.Tokens
+    path-proxy -p 8080
 
-			// If a token file is specified, read tokens from it
-			if cfg.TokenFile != "" {
-				fileTokens, err := readTokensFromFile(cfg.TokenFile)
-				if err != nil {
-					slog.Error("Error reading token file", "error", err)
-					os.Exit(1)
-				}
-				tokens = append(tokens, fileTokens...)
-			}
+  # With custom request timeout
+  path-proxy --request-timeout 60`,
+	Run: func(cmd *cobra.Command, args []string) {
+		// Start with tokens from CLI flags
+		tokens := cfg.Tokens
 
-			// Configure logger based on log level
-			configureLogger(cfg.LogLevel)
-
-			// Create HTTP client with connection pooling
-			client := createHTTPClient(&cfg)
-
-			// Create the proxy handler with all configuration
-			handler := createProxyHandler(client, tokens, cfg.PathPrefix, cfg.Follow, cfg.MaxRedirect, cfg.AddHeaders)
-
-			// Add CORS middleware if enabled
-			if cfg.EnableCORS {
-				handler = corsMiddleware(handler, cfg.CORSOrigin, cfg.CORSMethods, cfg.CORSHeaders)
-			}
-
-			// Start the HTTP server with graceful shutdown
-			addr := fmt.Sprintf(":%d", cfg.Port)
-			server := &http.Server{
-				Addr:    addr,
-				Handler: handler,
-			}
-
-			slog.Info("Starting server",
-				"addr", addr,
-				"token_mode", map[bool]string{true: "enabled", false: "disabled"}[len(tokens) > 0],
-				"path_prefix", cfg.PathPrefix,
-				"follow_redirects", cfg.Follow,
-				"max_redirects", cfg.MaxRedirect,
-				"add_forward_headers", cfg.AddHeaders,
-				"log_level", cfg.LogLevel,
-				"cors_enabled", cfg.EnableCORS,
-				"shutdown_timeout", cfg.ShutdownTimeout)
-
-			// Channel to listen for errors
-			serverErrors := make(chan error, 1)
-
-			// Start the server
-			go func() {
-				slog.Info("Server listening on " + addr)
-				serverErrors <- server.ListenAndServe()
-			}()
-
-			// Wait for interrupt signal
-			quit := make(chan os.Signal, 1)
-			signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-			select {
-			case <-quit:
-				slog.Info("Shutting down server...")
-
-				// Create context with timeout
-				ctx, cancel := context.WithTimeout(context.Background(), time.Duration(cfg.ShutdownTimeout)*time.Second)
-				defer cancel()
-
-				// Gracefully shutdown the server
-				if err := server.Shutdown(ctx); err != nil {
-					slog.Error("Server forced to shutdown", "error", err)
-					os.Exit(1)
-				}
-
-				// Close idle connections in the HTTP client
-				if transport, ok := client.Transport.(*http.Transport); ok {
-					transport.CloseIdleConnections()
-				}
-
-				slog.Info("Server exited")
-				return
-
-			case err := <-serverErrors:
-				slog.Error("Server failed", "error", err)
+		// If a token file is specified, read tokens from it
+		if cfg.TokenFile != "" {
+			fileTokens, err := readTokensFromFile(cfg.TokenFile)
+			if err != nil {
+				slog.Error("Error reading token file", "error", err)
 				os.Exit(1)
 			}
-		},
-	}
+			tokens = append(tokens, fileTokens...)
+		}
+
+		// Configure logger based on log level
+		configureLogger(cfg.LogLevel)
+
+		// Create HTTP client with connection pooling
+		client := createHTTPClient(&cfg)
+
+		// Create the proxy handler with all configuration
+		handler := createProxyHandler(client, tokens, cfg.PathPrefix, cfg.AddHeaders)
+
+		// Add CORS middleware if enabled
+		if cfg.EnableCORS {
+			handler = corsMiddleware(handler, cfg.CORSOrigin, cfg.CORSMethods, cfg.CORSHeaders)
+		}
+
+		// Start the HTTP server with graceful shutdown
+		addr := fmt.Sprintf(":%d", cfg.Port)
+		server := &http.Server{
+			Addr:    addr,
+			Handler: handler,
+		}
+
+		slog.Info("Starting server",
+			"addr", addr,
+			"token_mode", map[bool]string{true: "enabled", false: "disabled"}[len(tokens) > 0],
+			"path_prefix", cfg.PathPrefix,
+			"follow_redirects", cfg.Follow,
+			"max_redirects", cfg.MaxRedirect,
+			"add_forward_headers", cfg.AddHeaders,
+			"log_level", cfg.LogLevel,
+			"cors_enabled", cfg.EnableCORS,
+			"shutdown_timeout", cfg.ShutdownTimeout)
+
+		// Channel to listen for errors
+		serverErrors := make(chan error, 1)
+
+		// Start the server
+		go func() {
+			slog.Info("Server listening on " + addr)
+			serverErrors <- server.ListenAndServe()
+		}()
+
+		// Wait for interrupt signal
+		quit := make(chan os.Signal, 1)
+		signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+		select {
+		case <-quit:
+			slog.Info("Shutting down server...")
+
+			// Create context with timeout
+			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(cfg.ShutdownTimeout)*time.Second)
+			defer cancel()
+
+			// Gracefully shutdown the server
+			if err := server.Shutdown(ctx); err != nil {
+				slog.Error("Server forced to shutdown", "error", err)
+				os.Exit(1)
+			}
+
+			// Close idle connections in the HTTP client
+			if transport, ok := client.Transport.(*http.Transport); ok {
+				transport.CloseIdleConnections()
+			}
+
+			slog.Info("Server exited")
+			return
+
+		case err := <-serverErrors:
+			slog.Error("Server failed", "error", err)
+			os.Exit(1)
+		}
+	},
+}
+
+func init() {
+	f := rootCmd.Flags()
 
 	// Define command line flags
-	rootCmd.Flags().IntVarP(&cfg.Port, "port", "p", 8080, "Port to listen on")
-	rootCmd.Flags().StringSliceVarP(&cfg.Tokens, "token", "t", []string{}, "Access token (can be specified multiple times)")
-	rootCmd.Flags().StringVar(&cfg.TokenFile, "token-file", "", "File containing tokens (one per line)")
-	rootCmd.Flags().StringVar(&cfg.PathPrefix, "path-prefix", "", "Custom path prefix for all requests (e.g., myprefix/v1)")
-	rootCmd.Flags().BoolVar(&cfg.Follow, "follow", true, "Follow HTTP redirects")
-	rootCmd.Flags().IntVar(&cfg.MaxRedirect, "max-redirect", 10, "Maximum number of redirects to follow")
-	rootCmd.Flags().BoolVar(&cfg.AddHeaders, "add-headers", true, "Add X-Forwarded-* headers")
-	rootCmd.Flags().StringVar(&cfg.LogLevel, "log-level", "info", "Log level (debug, info, warn, error)")
-	rootCmd.Flags().BoolVar(&cfg.EnableCORS, "enable-cors", false, "Enable CORS headers")
-	rootCmd.Flags().StringVar(&cfg.CORSOrigin, "cors-origin", "*", "CORS Origin header value")
-	rootCmd.Flags().StringVar(&cfg.CORSMethods, "cors-methods", "GET, POST, PUT, DELETE, OPTIONS", "CORS Methods header value")
-	rootCmd.Flags().StringVar(&cfg.CORSHeaders, "cors-headers", "Content-Type, Authorization", "CORS Headers value")
-	rootCmd.Flags().IntVar(&cfg.MaxIdleConns, "max-idle-conns", 100, "Maximum idle connections")
-	rootCmd.Flags().IntVar(&cfg.MaxIdleConnsPerHost, "max-idle-conns-per-host", 10, "Maximum idle connections per host")
-	rootCmd.Flags().IntVar(&cfg.IdleConnTimeout, "idle-conn-timeout", 90, "Idle connection timeout in seconds")
-	rootCmd.Flags().IntVar(&cfg.TLSHandshakeTimeout, "tls-handshake-timeout", 10, "TLS handshake timeout in seconds")
-	rootCmd.Flags().BoolVar(&cfg.DisableKeepAlives, "disable-keep-alives", false, "Disable HTTP keep-alives")
-	rootCmd.Flags().IntVar(&cfg.ShutdownTimeout, "shutdown-timeout", 30, "Graceful shutdown timeout in seconds")
+	f.IntVarP(&cfg.Port, "port", "p", cfg.Port, "Port to listen on")
+	f.StringSliceVarP(&cfg.Tokens, "token", "t", cfg.Tokens, "Access token (can be specified multiple times)")
+	f.StringVar(&cfg.TokenFile, "token-file", cfg.TokenFile, "File containing tokens (one per line)")
+	f.StringVar(&cfg.PathPrefix, "path-prefix", cfg.PathPrefix, "Custom path prefix for all requests (e.g., myprefix/v1)")
+	f.BoolVar(&cfg.Follow, "follow", cfg.Follow, "Follow HTTP redirects")
+	f.IntVar(&cfg.MaxRedirect, "max-redirect", cfg.MaxRedirect, "Maximum number of redirects to follow")
+	f.BoolVar(&cfg.AddHeaders, "add-headers", cfg.AddHeaders, "Add X-Forwarded-* headers")
+	f.StringVar(&cfg.LogLevel, "log-level", cfg.LogLevel, "Log level (debug, info, warn, error)")
+	f.BoolVar(&cfg.EnableCORS, "enable-cors", cfg.EnableCORS, "Enable CORS headers")
+	f.StringVar(&cfg.CORSOrigin, "cors-origin", cfg.CORSOrigin, "CORS Origin header value when CORS is enabled")
+	f.StringVar(&cfg.CORSMethods, "cors-methods", cfg.CORSMethods, "CORS Methods header value when CORS is enabled")
+	f.StringVar(&cfg.CORSHeaders, "cors-headers", cfg.CORSHeaders, "CORS Headers value when CORS is enabled")
+	f.IntVar(&cfg.MaxIdleConns, "max-idle-conns", cfg.MaxIdleConns, "Maximum idle connections")
+	f.IntVar(&cfg.MaxIdleConnsPerHost, "max-idle-conns-per-host", cfg.MaxIdleConnsPerHost, "Maximum idle connections per host")
+	f.IntVar(&cfg.IdleConnTimeout, "idle-conn-timeout", cfg.IdleConnTimeout, "Idle connection timeout in seconds")
+	f.IntVar(&cfg.TLSHandshakeTimeout, "tls-handshake-timeout", cfg.TLSHandshakeTimeout, "TLS handshake timeout in seconds")
+	f.BoolVar(&cfg.DisableKeepAlives, "disable-keep-alives", cfg.DisableKeepAlives, "Disable HTTP keep-alives")
+	f.IntVar(&cfg.ShutdownTimeout, "shutdown-timeout", cfg.ShutdownTimeout, "Graceful shutdown timeout in seconds")
+	f.IntVar(&cfg.RequestTimeout, "request-timeout", cfg.RequestTimeout, "Request timeout in seconds")
+}
+
+func main() {
 
 	// Execute the command
 	if err := rootCmd.Execute(); err != nil {
@@ -284,10 +325,27 @@ func createHTTPClient(cfg *Config) *http.Client {
 		"tls_handshake_timeout", cfg.TLSHandshakeTimeout,
 		"disable_keep_alives", cfg.DisableKeepAlives)
 
-	return &http.Client{
+	client := &http.Client{
 		Transport: transport,
-		Timeout:   30 * time.Second, // Overall request timeout
+		Timeout:   time.Duration(cfg.RequestTimeout) * time.Second, // Overall request timeout
 	}
+
+	if cfg.Follow {
+		// Configure client to follow redirects
+		client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+			if len(via) >= cfg.MaxRedirect {
+				return fmt.Errorf("stopped after %d redirects", cfg.MaxRedirect)
+			}
+			return nil
+		}
+	} else {
+		// Disable following redirects
+		client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		}
+	}
+
+	return client
 }
 
 // readTokensFromFile reads tokens from a file, ignoring empty lines and comments
@@ -360,34 +418,78 @@ func validateToken(token string, tokenSet map[string]struct{}) bool {
 	return ok
 }
 
+// isValidPort checks if a port number is valid (1-65535)
+func isValidPort(portStr string) bool {
+	port, err := strconv.Atoi(portStr)
+	if err != nil {
+		return false
+	}
+	return port > 0 && port <= 65535
+}
+
 // extractPathPrefix removes the configured path prefix from the request path
-func extractPathPrefix(path, pathPrefix string) (string, error) {
+func extractPathPrefix(requestPath, pathPrefix string) (string, error) {
+	// Clean the path first to handle multiple slashes
+	cleanPath := path.Clean(requestPath)
+
 	if pathPrefix == "" {
-		return path, nil
+		return cleanPath, nil
 	}
 
-	prefixWithSlash := "/" + pathPrefix
-	if !strings.HasPrefix(path, prefixWithSlash) {
+	// Normalize path prefix
+	normalizedPrefix := strings.Trim(pathPrefix, "/")
+
+	// Build the expected prefix pattern
+	var expectedPrefix string
+	if normalizedPrefix != "" {
+		expectedPrefix = "/" + normalizedPrefix
+	}
+
+	// Check if the path starts with the expected prefix
+	if !strings.HasPrefix(cleanPath, expectedPrefix) {
 		return "", fmt.Errorf("path does not match configured prefix: %s", pathPrefix)
 	}
 
-	remainingPath := strings.TrimPrefix(path, prefixWithSlash)
+	// Extract the remaining path
+	remainingPath := strings.TrimPrefix(cleanPath, expectedPrefix)
+
+	// Handle empty remaining path
 	if remainingPath == "" {
 		remainingPath = "/"
+	} else if !strings.HasPrefix(remainingPath, "/") && remainingPath != "/" {
+		// Ensure remaining path starts with a slash (unless it's just "/")
+		remainingPath = "/" + remainingPath
 	}
+
 	return remainingPath, nil
 }
 
 // parseTargetURL parses the target URL from the path components
 func parseTargetURL(targetPath, pathPrefix string) (*url.URL, error) {
-	parts := strings.SplitN(strings.TrimPrefix(targetPath, "/"), "/", 3)
+	// Clean the path to handle multiple slashes
+	cleanPath := path.Clean(targetPath)
+	if cleanPath != targetPath {
+		slog.Debug("Path cleaned", "original", targetPath, "cleaned", cleanPath)
+	}
+
+	parts := strings.SplitN(strings.TrimPrefix(cleanPath, "/"), "/", 3)
 	if len(parts) < 3 {
 		return nil, fmt.Errorf("invalid URL format: expected /%s/<proto>/<domain>/<port>/path", pathPrefix)
 	}
 
-	proto := parts[0]
+	proto := strings.ToLower(parts[0])
 	domain := parts[1]
 	portStr := parts[2]
+
+	// Validate protocol
+	if proto != ProtocolHTTP && proto != ProtocolHTTPS {
+		return nil, fmt.Errorf("unsupported protocol: %s (only http and https are supported)", proto)
+	}
+
+	// Validate domain is not empty
+	if domain == "" {
+		return nil, fmt.Errorf("domain cannot be empty")
+	}
 
 	// Extract port and path if present
 	var targetURLPath string
@@ -396,14 +498,34 @@ func parseTargetURL(targetPath, pathPrefix string) (*url.URL, error) {
 		targetURLPath = "/" + portAndPath[1]
 	}
 
+	// Validate port number
+	if !isValidPort(portStr) {
+		return nil, fmt.Errorf("invalid port number: %s (must be 1-65535)", portStr)
+	}
+
+	// Additional validation: check for path traversal attempts in domain
+	if strings.Contains(domain, "..") || strings.Contains(domain, "/") {
+		return nil, fmt.Errorf("invalid domain format")
+	}
+
 	target := fmt.Sprintf("%s://%s:%s", proto, domain, portStr)
 	target += targetURLPath
 
-	return url.Parse(target)
+	parsedURL, err := url.Parse(target)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse target URL: %w", err)
+	}
+
+	// Ensure the parsed URL matches what we expect
+	if parsedURL.Scheme != proto || parsedURL.Hostname() != domain || parsedURL.Port() != portStr {
+		return nil, fmt.Errorf("URL parsing validation failed")
+	}
+
+	return parsedURL, nil
 }
 
 // createProxyHandler creates the main HTTP handler for the reverse proxy
-func createProxyHandler(client *http.Client, tokens []string, pathPrefix string, follow bool, maxRedirect int, addHeaders bool) http.Handler {
+func createProxyHandler(client *http.Client, tokens []string, pathPrefix string, addHeaders bool) http.Handler {
 	// Convert tokens to a set for O(1) lookup
 	tokenSet := make(map[string]struct{})
 	for _, token := range tokens {
@@ -417,13 +539,13 @@ func createProxyHandler(client *http.Client, tokens []string, pathPrefix string,
 
 	// Create the proxy handler
 	proxyHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		path := r.URL.Path
+		requestPath := r.URL.Path
 
 		// Extract path prefix
-		remainingPath, err := extractPathPrefix(path, pathPrefix)
+		remainingPath, err := extractPathPrefix(r.URL.Path, pathPrefix)
 		if err != nil {
 			slog.Warn("Path prefix validation failed",
-				"path", path,
+				"path", requestPath,
 				"prefix", pathPrefix,
 				"remote_addr", r.RemoteAddr)
 			http.Error(w, fmt.Sprintf("Invalid path prefix. Expected: /%s/...", pathPrefix), http.StatusBadRequest)
@@ -434,10 +556,13 @@ func createProxyHandler(client *http.Client, tokens []string, pathPrefix string,
 		var targetPath string
 		if len(tokenSet) > 0 {
 			// Token mode: /<token>/<proto>/<domain>/<port>/path
-			parts := strings.SplitN(strings.TrimPrefix(remainingPath, "/"), "/", 4)
-			if len(parts) < 4 {
+			// Clean the remaining path first
+			cleanRemainingPath := path.Clean(remainingPath)
+
+			parts := strings.SplitN(strings.TrimPrefix(cleanRemainingPath, "/"), "/", 4)
+			if len(parts) < 4 || parts[0] == "" || parts[1] == "" || parts[2] == "" || parts[3] == "" {
 				slog.Warn("Invalid URL format with token",
-					"path", path,
+					"path", requestPath,
 					"remote_addr", r.RemoteAddr,
 					"expected_format", fmt.Sprintf("/%s/<token>/<proto>/<domain>/<port>/path", pathPrefix))
 				http.Error(w, fmt.Sprintf("Invalid URL format. Expected: /%s/<token>/<proto>/<domain>/<port>/path", pathPrefix), http.StatusBadRequest)
@@ -448,7 +573,7 @@ func createProxyHandler(client *http.Client, tokens []string, pathPrefix string,
 			if !validateToken(token, tokenSet) {
 				slog.Warn("Invalid token",
 					"token", token,
-					"path", path,
+					"path", requestPath,
 					"remote_addr", r.RemoteAddr)
 				http.Error(w, "Invalid token", http.StatusUnauthorized)
 				return
@@ -466,7 +591,7 @@ func createProxyHandler(client *http.Client, tokens []string, pathPrefix string,
 		if err != nil {
 			slog.Warn("Failed to parse target URL",
 				"error", err,
-				"path", path,
+				"path", requestPath,
 				"remote_addr", r.RemoteAddr)
 			http.Error(w, "Invalid target URL", http.StatusBadRequest)
 			return
@@ -475,7 +600,7 @@ func createProxyHandler(client *http.Client, tokens []string, pathPrefix string,
 		// Log request forwarding
 		slog.Debug("Forwarding request",
 			"method", r.Method,
-			"path", path,
+			"path", requestPath,
 			"target", targetURL.String(),
 			"remote_addr", r.RemoteAddr)
 
@@ -490,7 +615,7 @@ func createProxyHandler(client *http.Client, tokens []string, pathPrefix string,
 			}
 		}
 
-		handleRequestWithRedirects(client, w, r, targetURL, addHeaders, maxRedirect, follow)
+		handleRequestWithRedirects(client, w, r, targetURL, addHeaders)
 	})
 
 	// Wrap with logging middleware
@@ -498,7 +623,13 @@ func createProxyHandler(client *http.Client, tokens []string, pathPrefix string,
 }
 
 // handleRequestWithRedirects manually handles HTTP requests with optional redirect following
-func handleRequestWithRedirects(client *http.Client, w http.ResponseWriter, r *http.Request, targetURL *url.URL, addHeaders bool, maxRedirect int, follow bool) {
+func handleRequestWithRedirects(
+	client *http.Client,
+	w http.ResponseWriter,
+	r *http.Request,
+	targetURL *url.URL,
+	addHeaders bool,
+) {
 	// Create a new request for the target
 	targetReq, err := http.NewRequest(r.Method, targetURL.String(), r.Body)
 	if err != nil {
@@ -531,36 +662,9 @@ func handleRequestWithRedirects(client *http.Client, w http.ResponseWriter, r *h
 		targetReq.Header.Set("X-Forwarded-Host", r.Host)
 	}
 
-	// Configure redirect checking for this specific request
-	originalCheckRedirect := client.CheckRedirect
-	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
-		if !follow {
-			// Don't follow redirects, return them as-is
-			return http.ErrUseLastResponse
-		}
-		if len(via) >= maxRedirect {
-			return fmt.Errorf("stopped after %d redirects", maxRedirect)
-		}
-		return nil
-	}
-
 	// Send the request
 	resp, err := client.Do(targetReq)
-
-	// Restore original redirect check
-	client.CheckRedirect = originalCheckRedirect
-
 	if err != nil {
-		if urlErr, ok := err.(*url.Error); ok && urlErr.Err != nil {
-			if urlErr.Err.Error() == "stopped after "+fmt.Sprintf("%d", maxRedirect)+" redirects" {
-				slog.Warn("Max redirects exceeded",
-					"max_redirects", maxRedirect,
-					"target", targetURL.String(),
-					"remote_addr", r.RemoteAddr)
-				http.Error(w, urlErr.Error(), http.StatusTooManyRequests)
-				return
-			}
-		}
 		slog.Error("Failed to proxy request",
 			"error", err,
 			"target", targetURL.String(),
@@ -578,6 +682,6 @@ func handleRequestWithRedirects(client *http.Client, w http.ResponseWriter, r *h
 	w.WriteHeader(resp.StatusCode)
 
 	// Copy response body
-	//nolint:errcheck
+	//nolint:errcheck // no need to check because we cannot do anything with the error
 	io.Copy(w, resp.Body)
 }

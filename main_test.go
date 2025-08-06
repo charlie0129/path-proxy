@@ -114,7 +114,7 @@ func TestXForwardedHeaders_ExistingHeaders(t *testing.T) {
 	defer mockServer.Close()
 
 	client := &http.Client{}
-	handler := createProxyHandler(client, []string{"token"}, "", true, 10, true)
+	handler := createProxyHandler(client, []string{"token"}, "", true)
 
 	// Parse mock server URL
 	serverURL, err := url.Parse(mockServer.URL)
@@ -158,7 +158,7 @@ func TestXForwardedHeaders_HTTPS(t *testing.T) {
 	defer mockServer.Close()
 
 	client := &http.Client{}
-	handler := createProxyHandler(client, []string{"token"}, "", true, 10, true)
+	handler := createProxyHandler(client, []string{"token"}, "", true)
 
 	// Parse mock server URL
 	serverURL, err := url.Parse(mockServer.URL)
@@ -198,7 +198,7 @@ func TestRequestWithSpecialHeaders(t *testing.T) {
 	defer mockServer.Close()
 
 	client := &http.Client{}
-	handler := createProxyHandler(client, []string{"token"}, "", true, 10, true)
+	handler := createProxyHandler(client, []string{"token"}, "", true)
 
 	// Parse mock server URL
 	serverURL, err := url.Parse(mockServer.URL)
@@ -244,7 +244,7 @@ func TestRequestBodyHandling(t *testing.T) {
 	defer mockServer.Close()
 
 	client := &http.Client{}
-	handler := createProxyHandler(client, []string{"token"}, "", true, 10, true)
+	handler := createProxyHandler(client, []string{"token"}, "", true)
 
 	// Parse mock server URL
 	serverURL, err := url.Parse(mockServer.URL)

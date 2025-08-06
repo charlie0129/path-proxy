@@ -13,11 +13,11 @@ func TestPathPrefix(t *testing.T) {
 	defer mockServer.Close()
 
 	// Test with tokens
-	client := createTestHTTPClient()
-	handlerWithTokens := createProxyHandler(client, []string{"token"}, "myprefix/v1", true, 10, true)
+	client := createHTTPClient(&defaultConfig)
+	handlerWithTokens := createProxyHandler(client, []string{"token"}, "myprefix/v1", true)
 
 	// Test without tokens
-	handlerWithoutTokens := createProxyHandler(client, []string{}, "myprefix/v1", true, 10, true)
+	handlerWithoutTokens := createProxyHandler(client, []string{}, "myprefix/v1", true)
 
 	// Parse mock server URL
 	serverURL, err := url.Parse(mockServer.URL)
@@ -38,10 +38,22 @@ func TestPathPrefix(t *testing.T) {
 		path       string
 		wantStatus int
 	}{
-		{"Valid path prefix with token", handlerWithTokens, fmt.Sprintf("/myprefix/v1/token/http/%s/%s/test", host, port), http.StatusOK},
-		{"Valid path prefix without token", handlerWithoutTokens, fmt.Sprintf("/myprefix/v1/http/%s/%s/test", host, port), http.StatusOK},
-		{"Invalid path prefix", handlerWithTokens, fmt.Sprintf("/wrongprefix/token/http/%s/%s/test", host, port), http.StatusBadRequest},
-		{"Missing path prefix", handlerWithTokens, fmt.Sprintf("/token/http/%s/%s/test", host, port), http.StatusBadRequest},
+		{"Valid path prefix with token",
+			handlerWithTokens,
+			fmt.Sprintf("/myprefix/v1/token/http/%s/%s/test", host, port),
+			http.StatusOK},
+		{"Valid path prefix without token",
+			handlerWithoutTokens,
+			fmt.Sprintf("/myprefix/v1/http/%s/%s/test", host, port),
+			http.StatusOK},
+		{"Invalid path prefix",
+			handlerWithTokens,
+			fmt.Sprintf("/wrongprefix/token/http/%s/%s/test", host, port),
+			http.StatusBadRequest},
+		{"Missing path prefix",
+			handlerWithTokens,
+			fmt.Sprintf("/token/http/%s/%s/test", host, port),
+			http.StatusBadRequest},
 	}
 
 	for _, tt := range tests {
@@ -89,8 +101,8 @@ func TestPathPrefix_Normalization(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			client := createTestHTTPClient()
-			handler := createProxyHandler(client, []string{}, tt.pathPrefix, true, 10, true)
+			client := createHTTPClient(&defaultConfig)
+			handler := createProxyHandler(client, []string{}, tt.pathPrefix, true)
 
 			requestPath := fmt.Sprintf("/myprefix/v1/http/%s/%s/test", host, port)
 			req := httptest.NewRequest("GET", "http://example.com"+requestPath, nil)
