@@ -29,9 +29,30 @@ Note that you should use regular forward proxies (e.g. using HTTP_PROXY/HTTPS_PR
 
 ### Download from Releases
 
+Head to the [Releases](https://github.com/charlie0129/path-proxy/releases) page and download the latest binary for your platform. Extract the archive and place the binary in your PATH.
+
 ### Docker Containers
 
+The image is available on both GitHub Container Registry and DockerHub:
+
+- GHCR: ghcr.io/charlie0129/path-proxy
+- DockerHub: charlie0129/path-proxy
+
+You can run the proxy using Docker:
+
+```bash
+docker run --rm -it -p 8080:8080 ghcr.io/charlie0129/path-proxy:latest
+```
+
 ### Build from Source
+
+To build from source, ensure you have Go installed (version 1.24 or later). Clone the repository and run:
+
+```bash
+make
+```
+
+You should see the `path-proxy` binary in `bin/`.
 
 ## Usage
 
