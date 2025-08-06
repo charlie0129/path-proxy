@@ -39,3 +39,6 @@ include makefiles/targets.mk
 
 lint:
 	build/lint.sh
+
+test:
+	go test -v ./...

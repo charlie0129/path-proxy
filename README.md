@@ -16,6 +16,7 @@ Note that you should use regular forward proxies (e.g. using HTTP_PROXY/HTTPS_PR
 ## Features
 
 - **Two routing modes**: Token-based authentication or open access
+- **Custom path prefix**: Optional path prefix for all requests
 - **Protocol support**: HTTP and HTTPS
 - **Header manipulation**: Automatically sets Host header and adds X-Forwarded-* headers
 - **Redirect handling**: Configurable redirect following with maximum limits
@@ -70,6 +71,13 @@ Start the proxy server on port 8080:
 ./path-proxy -p 8080
 ```
 
+### With Custom Path Prefix
+
+```bash
+# Set a custom path prefix
+./path-proxy -p 8080 --path-prefix myprefix/v1
+```
+
 ### With Tokens
 
 ```bash
@@ -112,6 +120,7 @@ dev-token-789
       --max-idle-conns-per-host int   Maximum idle connections per host (default 10)
       --max-redirect int              Maximum number of redirects to follow (default 10)
   -p, --port int                      Port to listen on (default 8080)
+      --path-prefix string            Custom path prefix for all requests (e.g., myprefix/v1)
       --shutdown-timeout int          Graceful shutdown timeout in seconds (default 30)
       --tls-handshake-timeout int     TLS handshake timeout in seconds (default 10)
   -t, --token strings                 Access token (can be specified multiple times)
@@ -128,24 +137,30 @@ The proxy extracts the target URL from the request path:
 #### Without Tokens (Open Mode)
 
 ```
-/<protocol>/<domain>/<port>/<path>
+/<prefix>/<protocol>/<domain>/<port>/<path>
 ```
 
 Example:
 ```
 GET /https/github.com/443/charlie0129/path-proxy
     → GET https://github.com:443/charlie0129/path-proxy
+
+GET /myprefix/v1/https/github.com/443/charlie0129/path-proxy
+    → GET https://github.com:443/charlie0129/path-proxy
 ```
 
 #### With Tokens (Secure Mode)
 
 ```
-/<token>/<protocol>/<domain>/<port>/<path>
+/<prefix>/<token>/<protocol>/<domain>/<port>/<path>
 ```
 
 Example:
 ```
 GET /my-token/https/api.github.com/443/users/charlie0129
+    → GET https://api.github.com:443/users/charlie0129
+
+GET /myprefix/v1/my-token/https/api.github.com/443/users/charlie0129
     → GET https://api.github.com:443/users/charlie0129
 ```
 
@@ -161,17 +176,26 @@ GET /my-token/https/api.github.com/443/users/charlie0129
    
    # With token
    curl http://localhost:8080/my-token/https/github.com/443/charlie0129/path-proxy
+   
+   # With custom path prefix
+   curl http://localhost:8080/myprefix/v1/https/github.com/443/charlie0129/path-proxy
+   
+   # With path prefix and token
+   curl http://localhost:8080/myprefix/v1/my-token/https/github.com/443/charlie0129/path-proxy
    ```
 
 2. **Accessing HTTP service on non-standard port**
    ```bash
    curl http://localhost:8080/http/local-dev/3000/api/users
+   curl http://localhost:8080/myprefix/v1/http/local-dev/3000/api/users
    ```
 
 3. **API requests with headers**
    ```bash
    curl -H "Authorization: Bearer abc123" \
         http://localhost:8080/token/https/api.example.com/443/v1/data
+   curl -H "Authorization: Bearer abc123" \
+        http://localhost:8080/myprefix/v1/token/https/api.example.com/443/v1/data
    ```
 
 4. **POST requests with body**
@@ -180,6 +204,10 @@ GET /my-token/https/api.github.com/443/users/charlie0129
         -H "Content-Type: application/json" \
         -d '{"name": "test"}' \
         http://localhost:8080/token/https/api.example.com/443/create
+   curl -X POST \
+        -H "Content-Type: application/json" \
+        -d '{"name": "test"}' \
+        http://localhost:8080/myprefix/v1/token/https/api.example.com/443/create
    ```
 
 5. **With connection pooling for high traffic**
@@ -190,6 +218,12 @@ GET /my-token/https/api.github.com/443/users/charlie0129
 6. **With custom shutdown timeout**
    ```bash
    ./path-proxy --shutdown-timeout 60 --token-file ./tokens.txt
+   ```
+
+7. **With custom path prefix**
+   ```bash
+   ./path-proxy --path-prefix api/v1
+   ./path-proxy --path-prefix proxy --token-file ./tokens.txt
    ```
 
 ## Header Handling

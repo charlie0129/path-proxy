@@ -26,6 +26,7 @@ type Config struct {
 	Port                int      // Port to listen on
 	Tokens              []string // Access tokens for authentication
 	TokenFile           string   // File containing tokens (one per line)
+	PathPrefix          string   // Custom path prefix for all requests
 	Follow              bool     // Whether to follow HTTP redirects
 	MaxRedirect         int      // Maximum number of redirects to follow
 	AddHeaders          bool     // Whether to add X-Forwarded-* headers
@@ -52,15 +53,18 @@ func main() {
 		Short:   "A reverse proxy that forwards requests based on URL path",
 		Long: `Path-Proxy is a specialized reverse proxy that forwards requests 
 by extracting target information from the URL path. It supports both token-based 
-and token-less routing modes.
+and token-less routing modes, with optional custom path prefix.
 
 URL Format:
-  Without tokens: /<protocol>/<domain>/<port>/path
-  With tokens:    /<token>/<protocol>/<domain>/<port>/path
+  Without tokens: /<prefix>/<protocol>/<domain>/<port>/path
+  With tokens:    /<prefix>/<token>/<protocol>/<domain>/<port>/path
 
 Examples:
   # Start proxy on port 8080
   path-proxy -p 8080
+  
+  # With custom path prefix
+  path-proxy -p 8080 --path-prefix myprefix/v1
   
   # With tokens from CLI
   path-proxy -p 8080 -t mytoken1 -t mytoken2
@@ -75,7 +79,10 @@ Examples:
   #   GET /https/github.com/443/some/file.txt
   #   → GET https://github.com/some/file.txt
   #   
-  #   GET /my-token/https/api.example.com/443/v1/users
+  #   GET /myprefix/v1/https/github.com/443/some/file.txt
+  #   → GET https://github.com/some/file.txt
+  #   
+  #   GET /myprefix/v1/my-token/https/api.example.com/443/v1/users
   #   → GET https://api.example.com/v1/users
 
 HTTP Proxy Support:
@@ -109,7 +116,7 @@ HTTP Proxy Support:
 			client := createHTTPClient(&cfg)
 
 			// Create the proxy handler with all configuration
-			handler := createProxyHandler(client, tokens, cfg.Follow, cfg.MaxRedirect, cfg.AddHeaders)
+			handler := createProxyHandler(client, tokens, cfg.PathPrefix, cfg.Follow, cfg.MaxRedirect, cfg.AddHeaders)
 
 			// Add CORS middleware if enabled
 			if cfg.EnableCORS {
@@ -126,6 +133,7 @@ HTTP Proxy Support:
 			slog.Info("Starting server",
 				"addr", addr,
 				"token_mode", map[bool]string{true: "enabled", false: "disabled"}[len(tokens) > 0],
+				"path_prefix", cfg.PathPrefix,
 				"follow_redirects", cfg.Follow,
 				"max_redirects", cfg.MaxRedirect,
 				"add_forward_headers", cfg.AddHeaders,
@@ -178,6 +186,7 @@ HTTP Proxy Support:
 	rootCmd.Flags().IntVarP(&cfg.Port, "port", "p", 8080, "Port to listen on")
 	rootCmd.Flags().StringSliceVarP(&cfg.Tokens, "token", "t", []string{}, "Access token (can be specified multiple times)")
 	rootCmd.Flags().StringVar(&cfg.TokenFile, "token-file", "", "File containing tokens (one per line)")
+	rootCmd.Flags().StringVar(&cfg.PathPrefix, "path-prefix", "", "Custom path prefix for all requests (e.g., myprefix/v1)")
 	rootCmd.Flags().BoolVar(&cfg.Follow, "follow", true, "Follow HTTP redirects")
 	rootCmd.Flags().IntVar(&cfg.MaxRedirect, "max-redirect", 10, "Maximum number of redirects to follow")
 	rootCmd.Flags().BoolVar(&cfg.AddHeaders, "add-headers", true, "Add X-Forwarded-* headers")
@@ -345,34 +354,98 @@ func (lrw *loggingResponseWriter) Write(b []byte) (int, error) {
 	return n, err
 }
 
+// validateToken validates the provided token against the token set
+func validateToken(token string, tokenSet map[string]struct{}) bool {
+	_, ok := tokenSet[token]
+	return ok
+}
+
+// extractPathPrefix removes the configured path prefix from the request path
+func extractPathPrefix(path, pathPrefix string) (string, error) {
+	if pathPrefix == "" {
+		return path, nil
+	}
+
+	prefixWithSlash := "/" + pathPrefix
+	if !strings.HasPrefix(path, prefixWithSlash) {
+		return "", fmt.Errorf("path does not match configured prefix: %s", pathPrefix)
+	}
+
+	remainingPath := strings.TrimPrefix(path, prefixWithSlash)
+	if remainingPath == "" {
+		remainingPath = "/"
+	}
+	return remainingPath, nil
+}
+
+// parseTargetURL parses the target URL from the path components
+func parseTargetURL(targetPath, pathPrefix string) (*url.URL, error) {
+	parts := strings.SplitN(strings.TrimPrefix(targetPath, "/"), "/", 3)
+	if len(parts) < 3 {
+		return nil, fmt.Errorf("invalid URL format: expected /%s/<proto>/<domain>/<port>/path", pathPrefix)
+	}
+
+	proto := parts[0]
+	domain := parts[1]
+	portStr := parts[2]
+
+	// Extract port and path if present
+	var targetURLPath string
+	if portAndPath := strings.SplitN(portStr, "/", 2); len(portAndPath) > 1 {
+		portStr = portAndPath[0]
+		targetURLPath = "/" + portAndPath[1]
+	}
+
+	target := fmt.Sprintf("%s://%s:%s", proto, domain, portStr)
+	target += targetURLPath
+
+	return url.Parse(target)
+}
+
 // createProxyHandler creates the main HTTP handler for the reverse proxy
-func createProxyHandler(client *http.Client, tokens []string, follow bool, maxRedirect int, addHeaders bool) http.Handler {
+func createProxyHandler(client *http.Client, tokens []string, pathPrefix string, follow bool, maxRedirect int, addHeaders bool) http.Handler {
 	// Convert tokens to a set for O(1) lookup
 	tokenSet := make(map[string]struct{})
 	for _, token := range tokens {
 		tokenSet[token] = struct{}{}
 	}
 
+	// Normalize path prefix - remove leading/trailing slashes and ensure it starts without a slash
+	if pathPrefix != "" {
+		pathPrefix = strings.Trim(pathPrefix, "/")
+	}
+
 	// Create the proxy handler
 	proxyHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
 
-		// Determine the target path based on whether tokens are configured
+		// Extract path prefix
+		remainingPath, err := extractPathPrefix(path, pathPrefix)
+		if err != nil {
+			slog.Warn("Path prefix validation failed",
+				"path", path,
+				"prefix", pathPrefix,
+				"remote_addr", r.RemoteAddr)
+			http.Error(w, fmt.Sprintf("Invalid path prefix. Expected: /%s/...", pathPrefix), http.StatusBadRequest)
+			return
+		}
+
+		// Determine target path and validate token if needed
 		var targetPath string
 		if len(tokenSet) > 0 {
 			// Token mode: /<token>/<proto>/<domain>/<port>/path
-			parts := strings.SplitN(strings.TrimPrefix(path, "/"), "/", 4)
+			parts := strings.SplitN(strings.TrimPrefix(remainingPath, "/"), "/", 4)
 			if len(parts) < 4 {
 				slog.Warn("Invalid URL format with token",
 					"path", path,
 					"remote_addr", r.RemoteAddr,
-					"expected_format", "/<token>/<proto>/<domain>/<port>/path")
-				http.Error(w, "Invalid URL format. Expected: /<token>/<proto>/<domain>/<port>/path", http.StatusBadRequest)
+					"expected_format", fmt.Sprintf("/%s/<token>/<proto>/<domain>/<port>/path", pathPrefix))
+				http.Error(w, fmt.Sprintf("Invalid URL format. Expected: /%s/<token>/<proto>/<domain>/<port>/path", pathPrefix), http.StatusBadRequest)
 				return
 			}
 
 			token := parts[0]
-			if _, ok := tokenSet[token]; !ok {
+			if !validateToken(token, tokenSet) {
 				slog.Warn("Invalid token",
 					"token", token,
 					"path", path,
@@ -385,41 +458,13 @@ func createProxyHandler(client *http.Client, tokens []string, follow bool, maxRe
 			targetPath = "/" + strings.Join(parts[1:], "/")
 		} else {
 			// No token mode: /<proto>/<domain>/<port>/path
-			targetPath = path
+			targetPath = remainingPath
 		}
 
-		// Parse the target URL components: /<proto>/<domain>/<port>/path
-		parts := strings.SplitN(strings.TrimPrefix(targetPath, "/"), "/", 3)
-		if len(parts) < 3 {
-			slog.Warn("Invalid URL format",
-				"path", path,
-				"target_path", targetPath,
-				"remote_addr", r.RemoteAddr,
-				"expected_format", "/<proto>/<domain>/<port>/path")
-			http.Error(w, "Invalid URL format. Expected: /<proto>/<domain>/<port>/path", http.StatusBadRequest)
-			return
-		}
-
-		proto := parts[0]
-		domain := parts[1]
-		portStr := parts[2] // This can be a port or port/path now. Will fix it later.
-
-		// Extract port and path if present
-		var targetURLPath string
-		if portAndPath := strings.SplitN(portStr, "/", 2); len(portAndPath) > 1 {
-			portStr = portAndPath[0]
-			targetURLPath = "/" + portAndPath[1]
-		}
-
-		// Construct the target URL
-		target := fmt.Sprintf("%s://%s:%s", proto, domain, portStr)
-		target += targetURLPath
-
-		// Parse the target URL
-		targetURL, err := url.Parse(target)
+		// Parse target URL
+		targetURL, err := parseTargetURL(targetPath, pathPrefix)
 		if err != nil {
 			slog.Warn("Failed to parse target URL",
-				"target", target,
 				"error", err,
 				"path", path,
 				"remote_addr", r.RemoteAddr)
@@ -427,7 +472,7 @@ func createProxyHandler(client *http.Client, tokens []string, follow bool, maxRe
 			return
 		}
 
-		// Handle the request with our custom implementation
+		// Log request forwarding
 		slog.Debug("Forwarding request",
 			"method", r.Method,
 			"path", path,

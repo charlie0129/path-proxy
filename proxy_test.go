@@ -69,7 +69,7 @@ func TestTokenAuthentication(t *testing.T) {
 
 	tokens := []string{"valid-token", "another-token"}
 	client := createTestHTTPClient()
-	handler := createProxyHandler(client, tokens, true, 10, true)
+	handler := createProxyHandler(client, tokens, "", true, 10, true)
 
 	// Parse mock server URL
 	serverURL, err := url.Parse(mockServer.URL)
@@ -115,7 +115,7 @@ func TestNoTokenMode(t *testing.T) {
 	defer mockServer.Close()
 
 	client := createTestHTTPClient()
-	handler := createProxyHandler(client, []string{}, true, 10, true)
+	handler := createProxyHandler(client, []string{}, "", true, 10, true)
 
 	// Parse mock server URL
 	serverURL, err := url.Parse(mockServer.URL)
@@ -159,7 +159,7 @@ func TestURLParsing(t *testing.T) {
 	defer mockServer.Close()
 
 	client := createTestHTTPClient()
-	handler := createProxyHandler(client, []string{"token"}, true, 10, true)
+	handler := createProxyHandler(client, []string{"token"}, "", true, 10, true)
 
 	// Parse mock server URL
 	serverURL, err := url.Parse(mockServer.URL)
@@ -229,7 +229,7 @@ func TestRequestForwarding(t *testing.T) {
 	defer mockServer.Close()
 
 	client := createTestHTTPClient()
-	handler := createProxyHandler(client, []string{"token"}, true, 10, true)
+	handler := createProxyHandler(client, []string{"token"}, "", true, 10, true)
 
 	// Parse mock server URL
 	serverURL, err := url.Parse(mockServer.URL)
@@ -308,7 +308,7 @@ func TestXForwardedHeaders(t *testing.T) {
 	defer mockServer.Close()
 
 	client := createTestHTTPClient()
-	handler := createProxyHandler(client, []string{"token"}, true, 10, true)
+	handler := createProxyHandler(client, []string{"token"}, "", true, 10, true)
 
 	// Parse mock server URL
 	serverURL, err := url.Parse(mockServer.URL)
@@ -356,7 +356,7 @@ func TestRedirectHandling(t *testing.T) {
 
 	t.Run("Redirects enabled", func(t *testing.T) {
 		client := createTestHTTPClient()
-		handler := createProxyHandler(client, []string{"token"}, true, 10, true)
+		handler := createProxyHandler(client, []string{"token"}, "", true, 10, true)
 
 		// Parse mock server URL
 		serverURL, err := url.Parse(redirectServer.URL)
@@ -391,7 +391,7 @@ func TestRedirectHandling(t *testing.T) {
 
 	t.Run("Redirects disabled", func(t *testing.T) {
 		client := createTestHTTPClient()
-		handler := createProxyHandler(client, []string{"token"}, false, 10, true)
+		handler := createProxyHandler(client, []string{"token"}, "", false, 10, true)
 
 		// Parse mock server URL
 		serverURL, err := url.Parse(redirectServer.URL)
@@ -426,7 +426,7 @@ func TestMaxRedirects(t *testing.T) {
 	defer redirectServer.Close()
 
 	client := createTestHTTPClient()
-	handler := createProxyHandler(client, []string{"token"}, true, 2, true) // Max 2 redirects
+	handler := createProxyHandler(client, []string{"token"}, "", true, 2, true) // Max 2 redirects
 
 	// Parse mock server URL
 	serverURL, err := url.Parse(redirectServer.URL)
@@ -454,7 +454,7 @@ func TestMaxRedirects(t *testing.T) {
 
 func TestErrorHandling(t *testing.T) {
 	client := createTestHTTPClient()
-	handler := createProxyHandler(client, []string{"token"}, true, 10, true)
+	handler := createProxyHandler(client, []string{"token"}, "", true, 10, true)
 
 	t.Run("Invalid target URL", func(t *testing.T) {
 		req := httptest.NewRequest("GET", "http://example.com/token/https/invalid%20url/test", nil)
@@ -501,7 +501,7 @@ func TestHostHeader(t *testing.T) {
 	defer mockServer.Close()
 
 	client := createTestHTTPClient()
-	handler := createProxyHandler(client, []string{"token"}, true, 10, true)
+	handler := createProxyHandler(client, []string{"token"}, "", true, 10, true)
 
 	// Parse mock server URL
 	serverURL, err := url.Parse(mockServer.URL)
@@ -540,7 +540,7 @@ func TestCORSWithProxy(t *testing.T) {
 	defer mockServer.Close()
 
 	client := createTestHTTPClient()
-	handler := createProxyHandler(client, []string{"token"}, true, 10, true)
+	handler := createProxyHandler(client, []string{"token"}, "", true, 10, true)
 
 	// Wrap with CORS middleware
 	corsHandler := corsMiddleware(handler, "*", "GET, POST", "Content-Type")
@@ -592,7 +592,7 @@ func TestCORSWithProxy(t *testing.T) {
 
 func TestInvalidHTTPRequestMethod(t *testing.T) {
 	client := createTestHTTPClient()
-	handler := createProxyHandler(client, []string{"token"}, true, 10, true)
+	handler := createProxyHandler(client, []string{"token"}, "", true, 10, true)
 
 	// Parse mock server URL
 	serverURL, err := url.Parse("http://example.com")
