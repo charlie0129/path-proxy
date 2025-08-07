@@ -109,6 +109,45 @@ func TestReadTokensFromFile_EmptyFile(t *testing.T) {
 	}
 }
 
+func TestCreateHTTPClient_InsecureSkipTLSVerify(t *testing.T) {
+	tests := []struct {
+		name                       string
+		insecureSkipTLSVerify      bool
+		expectedInsecureSkipVerify bool
+	}{
+		{"Secure mode", false, false},
+		{"Insecure mode", true, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := defaultConfig
+			cfg.InsecureSkipTLSVerify = tt.insecureSkipTLSVerify
+
+			client := createHTTPClient(&cfg)
+
+			// Check if the transport has the correct TLS config
+			transport, ok := client.Transport.(*http.Transport)
+			if !ok {
+				t.Fatalf("Expected *http.Transport, got %T", client.Transport)
+			}
+
+			if tt.expectedInsecureSkipVerify {
+				if transport.TLSClientConfig == nil {
+					t.Error("Expected TLSClientConfig to be set in insecure mode")
+				} else if !transport.TLSClientConfig.InsecureSkipVerify {
+					t.Error("Expected InsecureSkipVerify to be true")
+				}
+			} else {
+				// In secure mode, TLSClientConfig should be nil (using default)
+				if transport.TLSClientConfig != nil && transport.TLSClientConfig.InsecureSkipVerify {
+					t.Error("Expected InsecureSkipVerify to be false or TLSClientConfig to be nil")
+				}
+			}
+		})
+	}
+}
+
 func TestXForwardedHeaders_ExistingHeaders(t *testing.T) {
 	mockServer := createMockTargetServer()
 	defer mockServer.Close()

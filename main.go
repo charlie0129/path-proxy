@@ -17,47 +17,49 @@ import (
 
 // Config holds the configuration for the reverse proxy
 type Config struct {
-	Port                int      // Port to listen on
-	Tokens              []string // Access tokens for authentication
-	TokenFile           string   // File containing tokens (one per line)
-	PathPrefix          string   // Custom path prefix for all requests
-	Follow              bool     // Whether to follow HTTP redirects
-	MaxRedirect         int      // Maximum number of redirects to follow
-	AddHeaders          bool     // Whether to add X-Forwarded-* headers
-	LogLevel            string   // Log level (debug, info, warn, error)
-	EnableCORS          bool     // Whether to enable CORS headers
-	CORSOrigin          string   // CORS Origin header value
-	CORSMethods         string   // CORS Methods header value
-	CORSHeaders         string   // CORS Headers value
-	MaxIdleConns        int      // Maximum idle connections
-	MaxIdleConnsPerHost int      // Maximum idle connections per host
-	IdleConnTimeout     int      // Idle connection timeout in seconds
-	TLSHandshakeTimeout int      // TLS handshake timeout in seconds
-	DisableKeepAlives   bool     // Disable HTTP keep-alives
-	ShutdownTimeout     int      // Shutdown timeout in seconds
-	RequestTimeout      int      // Request timeout in seconds
+	Port                  int      // Port to listen on
+	Tokens                []string // Access tokens for authentication
+	TokenFile             string   // File containing tokens (one per line)
+	PathPrefix            string   // Custom path prefix for all requests
+	Follow                bool     // Whether to follow HTTP redirects
+	MaxRedirect           int      // Maximum number of redirects to follow
+	AddHeaders            bool     // Whether to add X-Forwarded-* headers
+	LogLevel              string   // Log level (debug, info, warn, error)
+	EnableCORS            bool     // Whether to enable CORS headers
+	CORSOrigin            string   // CORS Origin header value
+	CORSMethods           string   // CORS Methods header value
+	CORSHeaders           string   // CORS Headers value
+	MaxIdleConns          int      // Maximum idle connections
+	MaxIdleConnsPerHost   int      // Maximum idle connections per host
+	IdleConnTimeout       int      // Idle connection timeout in seconds
+	TLSHandshakeTimeout   int      // TLS handshake timeout in seconds
+	DisableKeepAlives     bool     // Disable HTTP keep-alives
+	ShutdownTimeout       int      // Shutdown timeout in seconds
+	RequestTimeout        int      // Request timeout in seconds
+	InsecureSkipTLSVerify bool     // Skip TLS certificate verification (insecure)
 }
 
 var defaultConfig = Config{
-	Port:                8080,
-	Tokens:              []string{},
-	TokenFile:           "",
-	PathPrefix:          "",
-	Follow:              true,
-	MaxRedirect:         10,
-	AddHeaders:          true,
-	LogLevel:            "info",
-	EnableCORS:          false,
-	CORSOrigin:          "*",
-	CORSMethods:         "GET, POST, PUT, DELETE, OPTIONS",
-	CORSHeaders:         "Content-Type, Authorization",
-	MaxIdleConns:        100,
-	MaxIdleConnsPerHost: 10,
-	IdleConnTimeout:     90,
-	TLSHandshakeTimeout: 10,
-	DisableKeepAlives:   false,
-	ShutdownTimeout:     5,
-	RequestTimeout:      30,
+	Port:                  8080,
+	Tokens:                []string{},
+	TokenFile:             "",
+	PathPrefix:            "",
+	Follow:                true,
+	MaxRedirect:           10,
+	AddHeaders:            true,
+	LogLevel:              "info",
+	EnableCORS:            false,
+	CORSOrigin:            "*",
+	CORSMethods:           "GET, POST, PUT, DELETE, OPTIONS",
+	CORSHeaders:           "Content-Type, Authorization",
+	MaxIdleConns:          100,
+	MaxIdleConnsPerHost:   10,
+	IdleConnTimeout:       90,
+	TLSHandshakeTimeout:   10,
+	DisableKeepAlives:     false,
+	ShutdownTimeout:       5,
+	InsecureSkipTLSVerify: false,
+	RequestTimeout:        30,
 }
 
 var cfg = defaultConfig
@@ -137,6 +139,7 @@ func init() {
 	f.BoolVar(&cfg.DisableKeepAlives, "disable-keep-alives", cfg.DisableKeepAlives, "Disable HTTP keep-alives")
 	f.IntVar(&cfg.ShutdownTimeout, "shutdown-timeout", cfg.ShutdownTimeout, "Graceful shutdown timeout in seconds")
 	f.IntVar(&cfg.RequestTimeout, "request-timeout", cfg.RequestTimeout, "Request timeout in seconds")
+	f.BoolVar(&cfg.InsecureSkipTLSVerify, "insecure-skip-tls-verify", cfg.InsecureSkipTLSVerify, "Skip TLS certificate verification (insecure)")
 }
 
 func main() {

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"crypto/tls"
 	"fmt"
 	"log/slog"
 	"net"
@@ -70,13 +71,26 @@ func createHTTPClient(cfg *Config) *http.Client {
 		}).DialContext,
 	}
 
+	// Configure TLS certificate verification
+	if cfg.InsecureSkipTLSVerify {
+		transport.TLSClientConfig = &tls.Config{
+			InsecureSkipVerify: true,
+		}
+	}
+
 	// Log connection pool configuration
 	slog.Info("HTTP client configured with connection pooling",
 		"max_idle_conns", cfg.MaxIdleConns,
 		"max_idle_conns_per_host", cfg.MaxIdleConnsPerHost,
 		"idle_conn_timeout", cfg.IdleConnTimeout,
 		"tls_handshake_timeout", cfg.TLSHandshakeTimeout,
-		"disable_keep_alives", cfg.DisableKeepAlives)
+		"disable_keep_alives", cfg.DisableKeepAlives,
+		"insecure_skip_tls_verify", cfg.InsecureSkipTLSVerify)
+
+	// Log warning if TLS certificate verification is disabled
+	if cfg.InsecureSkipTLSVerify {
+		slog.Warn("TLS certificate verification is disabled - this is insecure and should only be used for testing")
+	}
 
 	client := &http.Client{
 		Transport: transport,
