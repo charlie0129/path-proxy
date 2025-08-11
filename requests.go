@@ -341,21 +341,21 @@ func handleRequestWithRedirects(
 	io.Copy(w, resp.Body)
 }
 
-func deepCopyURL(original *url.URL) *url.URL {
-	if original == nil {
+func deepCopyURL(orig *url.URL) *url.URL {
+	if orig == nil {
 		return nil
 	}
 
-	copy := *original // Copy all fields
+	cp := *orig // Copy all fields
 
 	// Deep copy User if it exists
-	if original.User != nil {
-		if password, ok := original.User.Password(); ok {
-			copy.User = url.UserPassword(original.User.Username(), password)
+	if orig.User != nil {
+		if password, ok := orig.User.Password(); ok {
+			cp.User = url.UserPassword(orig.User.Username(), password)
 		} else {
-			copy.User = url.User(original.User.Username())
+			cp.User = url.User(orig.User.Username())
 		}
 	}
 
-	return &copy
+	return &cp
 }
