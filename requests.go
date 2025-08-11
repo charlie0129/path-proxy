@@ -157,7 +157,7 @@ func copyHeaders(dst, src http.Header) {
 }
 
 // createProxyHandler creates the main HTTP handler for the reverse proxy
-func createProxyHandler(client *http.Client, tokens []string, pathPrefix string, addHeaders bool) http.Handler {
+func createProxyHandler(client *http.Client, tokens []string, pathPrefix string, removeForwardHeaders bool) http.Handler {
 	// Convert tokens to a set for O(1) lookup
 	tokenSet := make(map[string]Empty)
 	for _, token := range tokens {
@@ -244,7 +244,7 @@ func createProxyHandler(client *http.Client, tokens []string, pathPrefix string,
 			"target", targetURL.String(),
 			"remote_addr", r.RemoteAddr)
 
-		handleRequestWithRedirects(client, w, r, targetURL, addHeaders)
+		handleRequestWithRedirects(client, w, r, targetURL, removeForwardHeaders)
 	})
 
 	// Wrap with logging middleware
@@ -257,7 +257,7 @@ func handleRequestWithRedirects(
 	w http.ResponseWriter,
 	r *http.Request,
 	targetURL *url.URL,
-	addHeaders bool,
+	removeForwardHeaders bool,
 ) {
 
 	// Create a new request with context for the target
@@ -278,7 +278,7 @@ func handleRequestWithRedirects(
 	targetReq.Host = targetURL.Host
 
 	// Add X-Forwarded-* headers if enabled
-	if addHeaders {
+	if !removeForwardHeaders {
 		if targetReq.Header.Get("X-Forwarded-For") == "" {
 			targetReq.Header.Set("X-Forwarded-For", r.RemoteAddr)
 		} else {

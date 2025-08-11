@@ -24,7 +24,7 @@ type Config struct {
 	PathPrefix            string   // Custom path prefix for all requests
 	Follow                bool     // Whether to follow HTTP redirects
 	MaxRedirect           int      // Maximum number of redirects to follow
-	AddHeaders            bool     // Whether to add X-Forwarded-* headers
+	RemoveForwardHeaders  bool     // Whether to remove X-Forwarded-* headers
 	LogLevel              string   // Log level (debug, info, warn, error)
 	EnableCORS            bool     // Whether to enable CORS headers
 	CORSOrigin            string   // CORS Origin header value
@@ -48,7 +48,7 @@ var defaultConfig = Config{
 	PathPrefix:            "",
 	Follow:                true,
 	MaxRedirect:           10,
-	AddHeaders:            true,
+	RemoveForwardHeaders:  false,
 	LogLevel:              "info",
 	EnableCORS:            false,
 	CORSOrigin:            "*",
@@ -62,6 +62,7 @@ var defaultConfig = Config{
 	ShutdownTimeout:       5,
 	InsecureSkipTLSVerify: false,
 	RequestTimeout:        30,
+	DisableCompression:    false,
 }
 
 var cfg = defaultConfig
@@ -128,7 +129,7 @@ func init() {
 	f.StringVar(&cfg.PathPrefix, "path-prefix", cfg.PathPrefix, "Custom path prefix for all requests (e.g., myprefix/v1)")
 	f.BoolVar(&cfg.Follow, "follow", cfg.Follow, "Follow HTTP redirects")
 	f.IntVar(&cfg.MaxRedirect, "max-redirect", cfg.MaxRedirect, "Maximum number of redirects to follow")
-	f.BoolVar(&cfg.AddHeaders, "add-headers", cfg.AddHeaders, "Add X-Forwarded-* headers")
+	f.BoolVar(&cfg.RemoveForwardHeaders, "remove-forward-headers", cfg.RemoveForwardHeaders, "Remove X-Forwarded-* headers")
 	f.StringVar(&cfg.LogLevel, "log-level", cfg.LogLevel, "Log level (debug, info, warn, error)")
 	f.BoolVar(&cfg.EnableCORS, "enable-cors", cfg.EnableCORS, "Enable CORS headers")
 	f.StringVar(&cfg.CORSOrigin, "cors-origin", cfg.CORSOrigin, "CORS Origin header value when CORS is enabled")
@@ -174,7 +175,7 @@ func run(cmd *cobra.Command, args []string) {
 	client := createHTTPClient(&cfg)
 
 	// Create the proxy handler with all configuration
-	handler := createProxyHandler(client, tokens, cfg.PathPrefix, cfg.AddHeaders)
+	handler := createProxyHandler(client, tokens, cfg.PathPrefix, cfg.RemoveForwardHeaders)
 
 	// Add CORS middleware if enabled
 	if cfg.EnableCORS {
@@ -204,7 +205,7 @@ func run(cmd *cobra.Command, args []string) {
 		"path_prefix", cfg.PathPrefix,
 		"follow_redirects", cfg.Follow,
 		"max_redirects", cfg.MaxRedirect,
-		"add_forward_headers", cfg.AddHeaders,
+		"remove_forward_headers", cfg.RemoveForwardHeaders,
 		"log_level", cfg.LogLevel,
 		"cors_enabled", cfg.EnableCORS,
 		"shutdown_timeout", cfg.ShutdownTimeout,

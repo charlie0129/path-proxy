@@ -122,22 +122,25 @@ dev-token-789
 ```
 
 ```
-      --add-headers                   Add X-Forwarded-* headers (default true)
-      --cors-headers string           CORS Headers value (default "Content-Type, Authorization")
-      --cors-methods string           CORS Methods header value (default "GET, POST, PUT, DELETE, OPTIONS")
-      --cors-origin string            CORS Origin header value (default "*")
+      --cors-headers string           CORS Headers value when CORS is enabled (default "Content-Type, Authorization")
+      --cors-methods string           CORS Methods header value when CORS is enabled (default "GET, POST, PUT, DELETE, OPTIONS")
+      --cors-origin string            CORS Origin header value when CORS is enabled (default "*")
+      --disable-compression           Disable response compression (gzip, deflate, brotli and zstd)
       --disable-keep-alives           Disable HTTP keep-alives
       --enable-cors                   Enable CORS headers
       --follow                        Follow HTTP redirects (default true)
   -h, --help                          help for path-proxy
       --idle-conn-timeout int         Idle connection timeout in seconds (default 90)
+      --insecure-skip-tls-verify      Skip TLS certificate verification (insecure)
       --log-level string              Log level (debug, info, warn, error) (default "info")
       --max-idle-conns int            Maximum idle connections (default 100)
       --max-idle-conns-per-host int   Maximum idle connections per host (default 10)
       --max-redirect int              Maximum number of redirects to follow (default 10)
-  -p, --port int                      Port to listen on (default 8080)
       --path-prefix string            Custom path prefix for all requests (e.g., myprefix/v1)
-      --shutdown-timeout int          Graceful shutdown timeout in seconds (default 30)
+  -p, --port int                      Port to listen on (default 8080)
+      --remove-forward-headers        Remove X-Forwarded-* headers
+      --request-timeout int           Request timeout in seconds (default 30)
+      --shutdown-timeout int          Graceful shutdown timeout in seconds (default 5)
       --tls-handshake-timeout int     TLS handshake timeout in seconds (default 10)
   -t, --token strings                 Access token (can be specified multiple times)
       --token-file string             File containing tokens (one per line)
@@ -251,7 +254,7 @@ The proxy automatically modifies headers:
 3. **X-Forwarded-Proto**: Set to "http" or "https" based on the original request, if not already set
 4. **X-Forwarded-Host**: Set to the original Host header, if not already set
 
-You can disable adding X-Forwarded-* headers with `--add-headers=false`.
+You can disable adding X-Forwarded-* headers with `--remove-forward-headers`.
 
 ## Redirect Handling
 
