@@ -40,6 +40,7 @@ Note that you should use regular forward proxies (e.g. using HTTP_PROXY/HTTPS_PR
 - **Connection pooling**: Reuses HTTP connections for improved performance
 - **Graceful shutdown**: Clean shutdown with active request completion
 - **HTTP proxy support**: Automatically respects system proxy settings
+- **Response compression**: Supports gzip, deflate, brotli, and zstd compression
 
 ## Installation
 
@@ -343,6 +344,12 @@ export NO_PROXY=localhost,127.0.0.0/8,internal.example.com
 # Start the proxy - it will automatically use the environment variables
 ./path-proxy
 ```
+
+## Response Compression
+
+The proxy supports response compression by default to reduce bandwidth usage. It automatically handles gzip, deflate, brotli, and zstd compression based on the `Accept-Encoding` header from the client.
+
+You can disable compression with the `--disable-compression` flag.
 
 ## Contributing
 

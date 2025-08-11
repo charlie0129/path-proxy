@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/CAFxX/httpcompression"
 	"github.com/spf13/cobra"
 
 	"github.com/charlie0129/path-proxy/pkg/version"
@@ -37,6 +38,7 @@ type Config struct {
 	ShutdownTimeout       int      // Shutdown timeout in seconds
 	RequestTimeout        int      // Request timeout in seconds
 	InsecureSkipTLSVerify bool     // Skip TLS certificate verification (insecure)
+	DisableCompression    bool     // Disable response compression
 }
 
 var defaultConfig = Config{
@@ -140,6 +142,7 @@ func init() {
 	f.IntVar(&cfg.ShutdownTimeout, "shutdown-timeout", cfg.ShutdownTimeout, "Graceful shutdown timeout in seconds")
 	f.IntVar(&cfg.RequestTimeout, "request-timeout", cfg.RequestTimeout, "Request timeout in seconds")
 	f.BoolVar(&cfg.InsecureSkipTLSVerify, "insecure-skip-tls-verify", cfg.InsecureSkipTLSVerify, "Skip TLS certificate verification (insecure)")
+	f.BoolVar(&cfg.DisableCompression, "disable-compression", cfg.DisableCompression, "Disable response compression (gzip, deflate, brotli and zstd)")
 }
 
 func main() {
@@ -178,6 +181,16 @@ func run(cmd *cobra.Command, args []string) {
 		handler = corsMiddleware(handler, cfg.CORSOrigin, cfg.CORSMethods, cfg.CORSHeaders)
 	}
 
+	// Add compression middleware if enabled
+	if !cfg.DisableCompression {
+		compress, err := httpcompression.DefaultAdapter()
+		if err != nil {
+			slog.Error("Failed to create compression adapter", "error", err)
+			os.Exit(1)
+		}
+		handler = compress(handler)
+	}
+
 	// Start the HTTP server with graceful shutdown
 	addr := fmt.Sprintf(":%d", cfg.Port)
 	server := &http.Server{
@@ -194,7 +207,8 @@ func run(cmd *cobra.Command, args []string) {
 		"add_forward_headers", cfg.AddHeaders,
 		"log_level", cfg.LogLevel,
 		"cors_enabled", cfg.EnableCORS,
-		"shutdown_timeout", cfg.ShutdownTimeout)
+		"shutdown_timeout", cfg.ShutdownTimeout,
+		"disable_compression", cfg.DisableCompression)
 
 	// Channel to listen for errors
 	serverErrors := make(chan error, 1)

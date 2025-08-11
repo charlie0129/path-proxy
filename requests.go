@@ -218,8 +218,11 @@ func createProxyHandler(client *http.Client, tokens []string, pathPrefix string,
 			targetPath = remainingPath
 		}
 
-		// Parse target URL
-		targetURL, err := parseTargetURL(targetPath, pathPrefix)
+		// Deep copy the original URL to avoid modifying the original request.
+		targetURL := deepCopyURL(r.URL)
+
+		// Parse target URL in the path.
+		parsedURL, err := parseTargetURL(targetPath, pathPrefix)
 		if err != nil {
 			slog.Warn("Failed to parse target URL",
 				"error", err,
@@ -228,6 +231,11 @@ func createProxyHandler(client *http.Client, tokens []string, pathPrefix string,
 			http.Error(w, "Invalid target URL", http.StatusBadRequest)
 			return
 		}
+
+		// Put the parsed URL into the target URL
+		targetURL.Scheme = parsedURL.Scheme
+		targetURL.Host = parsedURL.Host
+		targetURL.Path = parsedURL.Path
 
 		// Log request forwarding
 		slog.Debug("Forwarding request",
@@ -251,6 +259,7 @@ func handleRequestWithRedirects(
 	targetURL *url.URL,
 	addHeaders bool,
 ) {
+
 	// Create a new request with context for the target
 	targetReq, err := http.NewRequestWithContext(r.Context(), r.Method, targetURL.String(), r.Body)
 	if err != nil {
@@ -330,4 +339,23 @@ func handleRequestWithRedirects(
 	// Copy response body
 	//nolint:errcheck // no need to check because we cannot do anything with the error
 	io.Copy(w, resp.Body)
+}
+
+func deepCopyURL(original *url.URL) *url.URL {
+	if original == nil {
+		return nil
+	}
+
+	copy := *original // Copy all fields
+
+	// Deep copy User if it exists
+	if original.User != nil {
+		if password, ok := original.User.Password(); ok {
+			copy.User = url.UserPassword(original.User.Username(), password)
+		} else {
+			copy.User = url.User(original.User.Username())
+		}
+	}
+
+	return &copy
 }
